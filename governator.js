@@ -36,7 +36,7 @@ var fayeBase = "/fayewebsocket",
 
 var fayeClient = new faye.Client('http://localhost:' + App.get("port") + fayeBase);
 
-var TEMP = "/Users/adrianloh/Desktop/temp/";
+var TEMP = "/usr/tmp/";
 
 // ============= FUNCS ==============//
 
@@ -164,5 +164,5 @@ var server = http.createServer(App);
 bayeux.attach(server);
 
 server.listen(App.get('port'), function () {
-	console.log("PID " + process.pid + " ==== Buttserver up" + " @ " + App.get('port'));
+	console.log("PID " + process.pid + " ==== Governator up" + " @ " + App.get('port'));
 });

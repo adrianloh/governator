@@ -114,7 +114,7 @@ Governator.directive('viewport', function ($rootScope, $timeout, fileWatcher) {
 	};
 });
 
-Governator.controller("ButtController", function($scope, $rootScope, $timeout, fileWatcher) {
+Governator.controller("MainController", function($scope, $rootScope, $timeout, fileWatcher) {
 
 	$scope.files = {};
 	$scope.sort = {
