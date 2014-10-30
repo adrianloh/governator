@@ -1,0 +1,26 @@
+<html ng-app="Butt">
+<head lang="en">
+	<base href="/">
+	<link href="/css/index.css" rel='stylesheet' type='text/css'>
+	<script src="/lib/jquery.1.8.3.min.js"></script>
+	<script src="/lib/angular.1.3.0.min.js"></script>
+</head>
+<body ng-controller="ButtController">
+	<div class="mainViewer">
+		<viewport></viewport>
+	</div>
+	<div class="fileView">
+		<ul class="fileList">
+			<li class="fileItem" ng-click="setHero(file.$key)" ng-repeat="file in files | toArray | orderBy: sort.predicate:sort.reverse">
+				<div>
+					<img class="fileThumb" src="{{file.src}}" />
+				</div>
+				<div class="filename" ng-bind="file.$key"></div>
+			</li>
+		</ul>
+	</div>
+	<script src="/lib/faye-browser.js"></script>
+	<script src="/lib/raphael2.1.2.min.js"></script>
+	<script src="/js/main.js"></script>
+</body>
+</html>

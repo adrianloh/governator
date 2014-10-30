@@ -1,0 +1,76 @@
+@import url(http://fonts.googleapis.com/css?family=Coda);
+
+$pageBG:rgb(66,66,66);
+$viewportBG:rgb(0, 0, 0);
+$heroImageWidth:1000px;
+$listFont: 400 12px "Coda", sans-serif;
+$mainViewerHeight: 620px;
+
+body {
+  background-color: $pageBG;
+  overflow: hidden;
+}
+
+ul {
+  list-style-type: none;
+}
+
+.mainViewer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  background: $viewportBG;
+  height: $mainViewerHeight;
+  padding-top: 10px;
+
+  .viewport {
+    width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+
+    img.heroImg {
+      width: $heroImageWidth;
+      border: 1px dotted rgb(113, 113, 113);
+    }
+
+  }
+
+}
+
+.fileView {
+  float: right;
+  margin-top: $mainViewerHeight;
+  height: 400px;
+  overflow: auto;
+  width: 100%;
+
+  li.fileItem {
+    font: $listFont;
+    display: inline-block;
+    margin-right: 10px;
+    text-align: center;
+    margin-bottom: 20px;
+    color: rgb(152, 152, 152);
+    cursor: pointer;
+
+    .filename {
+      margin-top: 8px;
+    }
+
+  }
+
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(192, 192, 192);
+}
+
+::-webkit-scrollbar-thumb:window-inactive {
+  background: rgb(166, 166, 166);
+}
