@@ -10,13 +10,15 @@ var request = require("request");
 var sass = require("node-sass");
 var express = require("express");
 var faye = require('faye');
+var clc = require('cli-color');
 
+var processor = require('./processor.js');
 var watchtower = require('./watchtower.js');
 
 var uuid = require('node-uuid');
 var folderWatchers = {};
 
-var PORT = 12141;
+var PORT = 14214;
 
 var App = express();
 
@@ -36,33 +38,96 @@ var fayeBase = "/fayewebsocket",
 
 var fayeClient = new faye.Client('http://localhost:' + App.get("port") + fayeBase);
 
-var TEMP = "/usr/tmp/";
+var C = {
+	render: clc.black.bgYellowBright,
+	bigfuckingerror: clc.bold.bgXterm(160),
+	broadcast: clc.xterm(75)
+};
+
+if (typeof(process.env.TEMP)==='undefined') {
+	console.log(C.bigfuckingerror("Environment TEMP folder not set"));
+	process.exit(1);
+}
+
+var TEMP = process.env["TEMP"] + "/";
 
 // ============= FUNCS ==============//
 
-function convert(params) {
-	var q = Q.defer(),
-		fsPath = params.source,
-		target_f = TEMP + params.channelId + "_" + params.name.replace(/\.exr/, "_f.jpg"),
-		target_s = TEMP + params.channelId + "_" + params.name.replace(/\.exr/, "_s.jpg"),
-		cmd_base = 'rvio "#SOURCE#" -outres #DIMENSION# -outgamma 2.2 -o "#TARGET#"',
-		cmd1 = cmd_base.replace(/#SOURCE#/, fsPath).replace(/#TARGET#/, target_f).replace(/#DIMENSION#/, "1000 600"),
-		cmd2 = cmd_base.replace(/#SOURCE#/, target_f).replace(/#TARGET#/, target_s).replace(/#DIMENSION#/, "180 180");
-		console.log(cmd1);
-		popen(cmd1, function(err) {
-			if (!err && fs.existsSync(target_f)) {
-				popen(cmd2, function(err) {
-					if (!err && fs.existsSync(target_s)) {
-						q.resolve(target_s);
-					} else {
-						q.reject();
+function info(fsPath) {
+	var mainQ = Q.defer(),
+		cmd1 = 'rvls -x "#SOURCE#"'.replace(/#SOURCE#/,fsPath),
+		cmd2 = 'ffmpeg -i "#SOURCE#"'.replace(/#SOURCE#/,fsPath),
+		channels = {},
+		exrInfo = {
+			pretty: [],
+			width: 0,
+			height: 0,
+			channels: []
+		};
+	Q.all([(function() {
+		var q = Q.defer(),
+			re_resolution = /\s+Resolution\s+(.+)$/,
+			re_compression = /\s+EXR\/compression\s+(.+)$/,
+			re_color1 = /\s+ColorSpace\/Transfer\s+(.+)$/,
+			re_color2 = /\s+ColorSpace\/Primaries\s+(.+)$/;
+		popen(cmd1, function(err, stdout) {
+			var m;
+			stdout.split("\n").forEach(function(line) {
+				if (m = line.match(re_resolution)) {
+					var l = m[1],
+						res = l.match(/(\d+)\s+?x\s+?(\d+)/);
+					exrInfo.pretty.push(l);
+					exrInfo.width = parseInt(res[1], 10);
+					exrInfo.height = parseInt(res[2], 10);
+				} else if (m = line.match(re_compression)) {
+					exrInfo.pretty.push(m[1]);
+				} else if (m = line.match(re_color1)) {
+					exrInfo.pretty.push(m[1]);
+				} else if (m = line.match(re_color2)) {
+					exrInfo.pretty.push(m[1]);
+				}
+			});
+			exrInfo.pretty = exrInfo.pretty.join(" ");
+			q.resolve();
+		});
+		return q.promise;
+	})(),
+		(function() {
+			var q = Q.defer();
+			popen(cmd2, function(err, stdout, stderr) {
+				var m, channel,
+					re_chan = /.+Unsupported channel (\w+)\.(\w+)/i,
+					re_pic = /.+Video: exr, (\w+)[,)]/;
+				stderr.split("\n").forEach(function(line) {
+					if (m = line.match(re_chan)) {
+						channel = m[1];
+						if (!channels.hasOwnProperty(channel)) {
+							channels[channel] = null;
+							exrInfo.channels.push(channel);
+						}
 					}
 				});
+				q.resolve();
+			});
+			return q.promise;
+		})()
+	]).then(function() {
+		var m = exrInfo.pretty.split(",")[1],
+			mc, n;
+		if (mc = m.match(/ (\d+)ch/)) {
+			n = parseInt(mc[1],10);
+			if (n>=4) {
+				exrInfo.channels.unshift("rgba");
+			} else {
+				exrInfo.channels.unshift("rgb");
 			}
-		});
-	return q.promise;
+		} else {
+			exrInfo.channels.unshift("rgb");
+		}
+		mainQ.resolve(exrInfo);
+	});
+	return mainQ.promise;
 }
-
 
 // ============ ROUTES ============= //
 
@@ -91,50 +156,78 @@ App.get("/css/:file", function(req, res) {
 });
 
 App.get(/@watch\/:(.+)/, function(req, res) {
-	var fsPath = req.params[0];
+	var fsPath = req.params[0],
+		afterSend = function() {};
 	console.log("WATCH: " + fsPath);
 	if (fs.existsSync(fsPath)) {
 		if (folderWatchers.hasOwnProperty(fsPath)) {
-			folderWatchers[fsPath].listeners += 1;
-			res.set("x-kickbutt", 1);
+			res.set("X-Cache-Hit", 1);
 		} else {
+			res.set("X-Cache-Miss", 1);
 			var channelId = uuid.v4().replace(/-/g,""),
 				files = fs.readdirSync(fsPath).filter(function(filename) {
 					return filename.match(/\.exr$/);
 				});
 			folderWatchers[fsPath] = {
 				channelId: channelId,
-				listeners: 1,
 				files: files
 			};
 			var	emitter = watchtower.watch(fsPath);
 			folderWatchers.emitter = emitter;
 			emitter.on("update", function (fileStat) {
-				var params = {
-					source: fsPath + "/" + fileStat.name,
-					name: fileStat.name,
-					channelId: channelId
-				};
+				var i,
+					params = {
+						source: fsPath + "/" + fileStat.name,
+						name: fileStat.name,
+						channelId: channelId,
+						fileStat: fileStat
+					};
 				if (fileStat.event.match(/created|modified/)) {
-					convert(params).then(function(target_s) {
-						console.log("DONE: " + target_s);
+					i = folderWatchers[fsPath].files.indexOf(fileStat.name);
+					if (i<0) {
+						folderWatchers[fsPath].files.push(fileStat.name);
+					}
+					processor.add(params).then(function(target_s) {
+						console.log(C.render(params.name));
+						console.log(C.broadcast(fileStat.event + " : " + fileStat.name));
 						fayeClient.publish(fayeBase + '/watch/' + channelId, fileStat);
 					}).fail(function() {
 						console.log("Failed to convert: " + fileStat.name);
 					});
 				} else {
+					if (fileStat.event==='deleted') {
+						i = folderWatchers[fsPath].files.indexOf(fileStat.name);
+						if (i>=0) {
+							folderWatchers[fsPath].files.splice(i,1);
+						}
+					}
+					console.log(C.broadcast(fileStat.event + " : " + fileStat.name));
 					fayeClient.publish(fayeBase + '/watch/' + channelId, fileStat);
 				}
 			});
-			folderWatchers[fsPath].files.forEach(function(filename) {
-				var filePath = fsPath + "/" + filename,
-					stat = watchtower.makeStat(filename, fs.statSync(filePath));
-				stat.event = "modified";
-				emitter.emit("update", stat);
-			});
+			afterSend = function() {
+				folderWatchers[fsPath].files.forEach(function(filename) {
+					var filePath = fsPath + "/" + filename,
+						stat = watchtower.makeStat(filename, fs.statSync(filePath));
+					stat.event = "created";
+					emitter.emit("update", stat);
+				});
+			};
 		}
 		res.send(folderWatchers[fsPath]);
-		res.end();
+		afterSend();
+	} else {
+		res.status(404).end();
+	}
+});
+
+App.get(/@info\/:(.+)/, function(req, res) {
+	var fsPath = req.params[0];
+	console.log("INFO: " + fsPath);
+	if (fs.existsSync(fsPath)) {
+		info(fsPath).then(function(exrInfo) {
+			res.send(exrInfo).end();
+		});
 	} else {
 		res.status(404).end();
 	}
@@ -142,11 +235,17 @@ App.get(/@watch\/:(.+)/, function(req, res) {
 
 App.get(/preview\/(.+)/, function(req, res) {
 	var img = req.params[0],
+		img404_f = __dirname + "/images/loader_f.gif",
+		img404_s = __dirname + "/images/loader_s.gif",
 		fsPath = TEMP + img;
 	if (fs.existsSync(fsPath)) {
 		res.sendFile(fsPath);
 	} else {
-		res.status(404).end();
+		if (img.match(/_f/)) {
+			res.status(404).end(); // Canvas will draw this
+		} else {
+			res.sendFile(img404_s);
+		}
 	}
 });
 

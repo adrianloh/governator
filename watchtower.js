@@ -16,52 +16,59 @@ function makeStatObject(filename, stat) {
 	return o;
 }
 
+var emitters = {};
 var watching = {};
-var emitter = new events.EventEmitter();
 
 function watchFolder(fsPath) {
+
+	if (emitters.hasOwnProperty(fsPath)) {
+		return emitters[fsPath];
+	} else {
+		emitters[fsPath] = new events.EventEmitter();
+	}
+
+	var emitter = emitters[fsPath];
+
 	fs.watch(fsPath, function (event, filename) {
-		if (!filename.match(/\.exr$/)) { return; }
+		if (!filename.match(/\.exr$/)) {
+			return;
+		}
 		var filepath = fsPath + "/" + filename;
+		console.log("Folder event: " + event + " - " + filename);
 		fs.stat(filepath, function (err, stat) {
-			var file;
 			if (err) {
-				// When stat-ing a file that's gone, we get this err
-				// which means, it was most likely deleted
-				file = {
-					name: filename
-				};
-				event = 'deleted';
 				if (watching.hasOwnProperty(filepath)) {
 					delete watching[filepath];
+					fs.unwatchFile(filepath);
 				}
-			} else {
-				if (stat.isDirectory()) { return; }
-				file = makeStatObject(filename, stat);
-				var elapsed_since_ctime = moment(file.ctime).fromNow();
-				if (event==='rename' && elapsed_since_ctime.match(/seconds/)) {
-					event = 'created';
-				} else {
-					event = 'modified';
-				}
-			}
-			file.event = event;
-			emitter.emit("update", file);
-			if (!watching.hasOwnProperty(filepath)) {
-				watching[filepath] = 1;
-				fs.watchFile(filepath, function(_stat) {
-					/* watchFile returns a stat object *irregardless* of what
-					happened. We have to stat it again to find out if it was deleted.*/
-					fs.stat(filepath, function (err, stat) {
-						var file;
-						if (!err) {
-							if (stat.isDirectory()) { return; }
-							file = makeStatObject(filename, stat);
-							file.event = "created";
-							emitter.emit("update", file);
-						}
-					});
+				emitter.emit("update", {
+					name: filename,
+					event: 'deleted'
 				});
+			} else if (stat.isDirectory()) {
+				// Do nothing
+			} else {
+				if (!watching.hasOwnProperty(filepath)) {
+
+					watching[filepath] = makeStatObject(filename, stat);
+					watching[filepath].event = "created";
+
+					emitter.emit("update", watching[filepath]);
+
+					fs.watchFile(filepath, function(_stat) {
+						/* watchFile returns a stat object *irregardless* of what
+						 happened. We have to stat it again to find out if it was deleted.*/
+						fs.stat(filepath, function (err, stat) {
+							var file;
+							if (!err) {
+								if (stat.isDirectory()) { return; }
+								file = makeStatObject(filename, stat);
+								file.event = "modified";
+								emitter.emit("update", file);
+							}
+						});
+					});
+				}
 			}
 		});
 	});
