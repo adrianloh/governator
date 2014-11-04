@@ -26,23 +26,27 @@ function convert(threadId, promise, params) {
 		cmd_base = 'rvio "#SOURCE#" -outres #DIMENSION# -outgamma 2.2 -o "#TARGET#"',
 		cmd1 = cmd_base.replace(/#SOURCE#/, fsPath).replace(/#TARGET#/, target_f).replace(/#DIMENSION#/, "1000 600"),
 		cmd2 = cmd_base.replace(/#SOURCE#/, target_f).replace(/-outgamma 2.2 /,"").replace(/#TARGET#/, target_s).replace(/#DIMENSION#/, "180 180"),
-		cmd3 = cmd_base.replace(/ -o /," -outchannelmap @ @ @ -o ").replace(/#SOURCE#/, fsPath).replace(/#TARGET#/, target_a).replace(/#DIMENSION#/, "1000 600");
+		cmd3 = cmd_base.replace(/ -o /," -inchannelmap @ @ @ -o ").replace(/#SOURCE#/, fsPath).replace(/#TARGET#/, target_a).replace(/#DIMENSION#/, "1000 600");
 	console.log(clc.xterm(154).bold("SPAWN: " + Object.keys(threads).length));
 	popen(cmd1, function(err) {
 		if (!err && fs.existsSync(target_f)) {
 			popen(cmd2, function(err) {
 				if (!err && fs.existsSync(target_s)) {
-					["A","R","G","B"].forEach(function(chan) {
-						var _cmd = cmd3.replace(/@/g, chan);
+					Q.all(["A","R","G","B"].map(function(chan) {
+						var q = Q.defer(),
+							_cmd = cmd3.replace(/@/g, chan);
 						popen(_cmd, function(err) {
 							if (!err) {
 								console.log(chanColors[chan](params.name));
 							}
+							q.resolve();
 						});
+						return q.promise;
+					})).then(function() {
+						delete threads[threadId];
+						console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));
+						promise.resolve(target_s);
 					});
-					delete threads[threadId];
-					console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));
-					promise.resolve(target_s);
 				} else {
 					delete threads[threadId];
 					console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));

@@ -80,16 +80,28 @@ Governator.directive('keyboard', function ($rootScope, $timeout, $http, $locatio
 						scope.scrub.direction = -1;
 						scope.scrub.goNextFrame();
 						break;
+					case 82: // R
+						scope.colorBar.toggleChannel("R");
+						break;
+					case 71: // G
+						scope.colorBar.toggleChannel("G");
+						break;
+					case 66: // B
+						scope.colorBar.toggleChannel("B");
+						break;
+					case 65: // A
+						scope.colorBar.toggleChannel("A");
+						break;
 				}
 			});
 		}
 	};
 });
 
-Governator.directive('colorbar', function () {
+Governator.directive('colorbar', function ($timeout) {
 	return {
 		restrict: "E",
-		template: '<div class="colorChips" ng-click="colorBar.toggleChannel($event)">' +
+		template: '<div class="colorChips" ng-click="colorBar.clickToggleChannel($event)">' +
 						'<div id="chan_R" class="colorChip red" ng-class="{active:colorBar.active===\'R\'}"></div>' +
 						'<div id="chan_G" class="colorChip green" ng-class="{active:colorBar.active===\'G\'}"></div>' +
 						'<div id="chan_B" class="colorChip blue" ng-class="{active:colorBar.active===\'B\'}"></div>' +
@@ -99,13 +111,19 @@ Governator.directive('colorbar', function () {
 		link: function(scope, element, attrs) {
 			scope.colorBar = {
 				active: null,
-				toggleChannel: function(event) {
+				toggleChannel: function(chan) {
+					var self = this;
+					$timeout(function() {
+						self.active = (self.active===chan) ? "f" : chan;
+						scope.hero.setChannel(self.active);
+					});
+				},
+				clickToggleChannel: function(event) {
 					var self = this,
 						t = $(event.target);
 					if (t.hasClass("colorChip")) {
 						var chan = t.attr("id").split("_")[1];
-						self.active = (self.active===chan) ? "f" : chan;
-						scope.hero.setChannel(self.active);
+						self.toggleChannel(chan);
 					}
 				}
 			};
@@ -121,31 +139,33 @@ Governator.directive('infoline', function ($rootScope, $timeout, $http, $locatio
 		link: function(scope, element, attrs) {
 
 			scope.infoLine = {
-				lookup: null,
 				display: ""
 			};
 
+			var timeoutToShow = $timeout(angular.noop);
+
 			scope.$watch(function() {
-				return scope.infoLine.lookup;
-			}, function() {
-				if (scope.infoLine.lookup===null) {
-					scope.infoLine.display = "";
+				return scope.hero.filename;
+			}, function(filename) {
+				scope.infoLine.display = "";
+				$timeout.cancel(timeoutToShow);
+				if (!scope.files.hasOwnProperty(filename)) {
 					return;
 				}
-				var fsPath = "/@info/:" + [$location.path(), filename].join("/");
-				$http.get(fsPath).success(function(exrInfo) {
-					console.log("Loaded exrInfo");
-					console.log(exrInfo);
-					var displayLine = exrInfo.pretty;
-					displayLine += " | CHANNELS: " + exrInfo.channels.join(",");
-					$timeout(function() {
-						scope.infoLine.display = displayLine;
+				timeoutToShow = $timeout(function() {
+					var fsPath = "/@info/:" + [$location.path(), filename].join("/");
+					$http.get(fsPath).success(function(exrInfo) {
+						var displayLine = exrInfo.pretty;
+						displayLine += " | CHANNELS: " + exrInfo.channels.join(",");
+						$timeout(function() {
+							scope.infoLine.display = displayLine;
+						});
+					}).error(function() {
+						$timeout(function() {
+							scope.infoLine.display = "";
+						});
 					});
-				}).error(function() {
-					$timeout(function() {
-						scope.infoLine.display = "";
-					});
-				});
+				}, 1250);
 			});
 		}
 	};
@@ -272,11 +292,8 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 				});
 			}
 
-			function attachSourceAndCache(f) {
+			function refreshSourceWithCurrChannel(f) {
 				f._src = f.sources[scope.hero.channel];
-				if (!scope.cache.hasOwnProperty(f._src)) {
-					scope.hero.refreshCache(f._src);
-				}
 			}
 
 			function refreshSequence(seq) {
@@ -303,7 +320,7 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 							};
 						} else {
 							f = realFrames[i];
-							attachSourceAndCache(f);
+							refreshSourceWithCurrChannel(f);
 						}
 						d.push(f);
 						i+=1;
@@ -332,6 +349,28 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 
 			var deregisterSeq = angular.noop;
 
+			// Get a queue of frames ordered by cache priority
+			function cRegion(n) {
+				var p = n-10;
+					p = p<0 ? 0 : p;
+				return scope.scrub.frames.slice(n+1,n+10)
+				.concat(scope.scrub.frames.slice(p,n).reverse())
+				.concat(scope.scrub.frames.slice(n+10,n+25));
+			}
+
+			// Lookbehind and Lookahead cache
+			function cacheRegionAroundIndex(n) {
+				if (n>=0) {
+					cRegion(n).filter(function(F) {
+						return F._src!==null && !scope.cache.hasOwnProperty(F._src);
+					}).forEach(function(F) {
+						scope.hero.refreshCache(F._src);
+					});
+				}
+			}
+
+			scope.$watch("scrub.currentIndex", cacheRegionAroundIndex);
+
 			// This also happens to initialize the very first load
 			scope.$watch("scrub.activeSequence", function(seq) {
 				if (scope.sequences.hasOwnProperty(seq)) {
@@ -347,15 +386,16 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 			});
 
 			// If the channel changes
-			scope.$watch("hero.channel", function(chan) {
+			scope.$watch("hero.channel", function() {
 				var isRunning = false;
-				if (scope.scrub.activeSequence!==null) { // And we're looking at a still
+				if (scope.scrub.activeSequence!==null) {
 					$timeout(function() {
 						scope.scrub.frames.forEach(function(F) {
 							if (F._src!==null) {
-								attachSourceAndCache(F);
+								refreshSourceWithCurrChannel(F);
 							}
 						});
+						cacheRegionAroundIndex(scope.scrub.currentIndex);
 						if (!isRunning) {
 							scope.hero.refreshCurrentImage();
 						}
@@ -371,7 +411,8 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 					var i = getIndexOfFrameInCurrentSequence(F.frame);
 					if (i>=0) {
 						$timeout(function() {
-							attachSourceAndCache(F);
+							refreshSourceWithCurrChannel(F);
+							scope.hero.refreshCache(F._src);
 							scope.scrub.frames[i] = F;
 						});
 					}
@@ -417,19 +458,22 @@ Governator.directive('viewportCanvas', function ($rootScope, $timeout, $q) {
 			scope.hero = {
 				filename: null,
 				channel: "f",
+				c: "f",
 				setImage: function (F) {
+					var self = this,
+						chan = scope.hero.channel;
+					$timeout(function() {
+						self.filename = F.name;
+					},0);
 					try {
-						var self = this,
-							chan = scope.hero.channel,
-							src = F.sources[chan];
+						var src = F.sources[chan];
 						if (scope.cache.hasOwnProperty(src)) {
 							render(src);
 						} else {
-							refreshCache(src).then(render);
+							refreshCache(src)
+								.then(render)
+								.fail(renderError);
 						}
-						$timeout(function() {
-							self.filename = F.name;
-						});
 					} catch(e) {
 						renderError(F);
 					}
@@ -480,10 +524,8 @@ Governator.directive('viewportCanvas', function ($rootScope, $timeout, $q) {
 				img.src = src + "?now=" + Date.now();
 				img.onerror = q.reject;
 				img.onload = function() {
-					$timeout(function() {
-						scope.cache[src] = img;
-						q.resolve(src);
-					});
+					scope.cache[src] = img;
+					q.resolve(src);
 				};
 				return q.promise;
 			}
@@ -496,7 +538,6 @@ Governator.directive('viewportCanvas', function ($rootScope, $timeout, $q) {
 						delete scope.cache[src];
 					} else {
 						if (scope.cache.hasOwnProperty(src)) {
-							console.log("REFRESH: " + src);
 							refreshCache(src).then(function() {
 								// TODO: Which means, when the player is playing, you must null the name out
 								if (scope.hero.filename===F.name &&

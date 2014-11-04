@@ -241,10 +241,10 @@ App.get(/preview\/(.+)/, function(req, res) {
 	if (fs.existsSync(fsPath)) {
 		res.sendFile(fsPath);
 	} else {
-		if (img.match(/_f/)) {
-			res.status(404).end(); // Canvas will draw this
-		} else {
+		if (img.match(/_s\.jpg/)) {
 			res.sendFile(img404_s);
+		} else {
+			res.status(404).end(); // Canvas will draw this
 		}
 	}
 });

@@ -6,6 +6,7 @@ $heroImageWidth:1000px;
 $listFont: 400 12px "Coda", sans-serif;
 $padTop: 5px;
 $viewportControlsHeight: 25px;
+$infoLineHeight: 20px;
 $mainViewerHeight: 640px;
 
 body {
@@ -109,13 +110,15 @@ ul {
 
   .infoline {
     position: absolute;
-    height: $viewportControlsHeight;
+    height: $infoLineHeight;
     width: 100%;
-    bottom: 0;
-    padding-left: 30px;
+    bottom: -1*$infoLineHeight;
+    padding-left: 50px;
     font: $listFont;
-    color: rgba(255, 255, 255, 0.85);
+    color: rgb(140,140,140);
     letter-spacing: 0.04em;
+    padding-top: 4px;
+    background-color: #111111;
   }
 
   .frame-indicator {
@@ -195,11 +198,12 @@ ul {
 }
 
 .fileView {
-  float: right;
-  margin-top: $viewportControlsHeight + $padTop + $mainViewerHeight;
-  height: 400px;
+  position: absolute;
+  top: $viewportControlsHeight + $padTop + $mainViewerHeight + $infoLineHeight + 10;
+  height: 45%;
   overflow: auto;
   width: 100%;
+  left: 0;
 
   li.fileItem {
     font: $listFont;
