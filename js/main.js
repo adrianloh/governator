@@ -361,7 +361,7 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 			// Lookbehind and Lookahead cache
 			function cacheRegionAroundIndex(n) {
 				if (n>=0) {
-					cRegion(n).filter(function(F) {
+					scope.scrub.frames.filter(function(F) {
 						return F._src!==null && !scope.cache.hasOwnProperty(F._src);
 					}).forEach(function(F) {
 						scope.hero.refreshCache(F._src);

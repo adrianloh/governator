@@ -33,22 +33,25 @@ function convert(threadId, promise, params) {
 	popen(cmd1, function(err) {
 		if (!err && fs.existsSync(target_f)) {
 			popen(cmd2, function(err) {
+				delete threads[threadId];
+				console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));
 				if (!err && fs.existsSync(target_s)) {
-					Q.all(["A","R","G","B"].map(function(chan) {
-						var q = Q.defer(),
-							_cmd = cmd3.replace(/@/g, chan);
-						popen(_cmd, function(err) {
-							if (!err) {
-								console.log(chanColors[chan](params.name));
-							}
-							q.resolve();
-						});
-						return q.promise;
-					})).then(function() {
-						delete threads[threadId];
-						console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));
-						promise.resolve(target_s);
-					});
+					promise.resolve(target_s);
+					//Q.all(["A","R","G","B"].map(function(chan) {
+					//	var q = Q.defer(),
+					//		_cmd = cmd3.replace(/@/g, chan);
+					//	popen(_cmd, function(err) {
+					//		if (!err) {
+					//			console.log(chanColors[chan](params.name));
+					//		}
+					//		q.resolve();
+					//	});
+					//	return q.promise;
+					//})).then(function() {
+					//	delete threads[threadId];
+					//	console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));
+					//	promise.resolve(target_s);
+					//});
 				} else {
 					delete threads[threadId];
 					console.log(clc.xterm(124).bold("DIE: " + Object.keys(threads).length));

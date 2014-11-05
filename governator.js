@@ -44,8 +44,8 @@ var C = {
 	broadcast: clc.xterm(75)
 };
 
-if (typeof(process.env.TEMP)==='undefined') {
-	console.log(C.bigfuckingerror("Environment TEMP folder not set"));
+if (typeof(process.env.TEMP)==='undefined' || !fs.existsSync(process.env.TEMP)) {
+	console.log(C.bigfuckingerror("Environment TEMP folder not set or does not exists"));
 	process.exit(1);
 }
 
