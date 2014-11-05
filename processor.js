@@ -1,12 +1,14 @@
 "use strict";
 
 var fs = require("fs");
+var os = require('os');
 var popen = require('child_process').exec;
 var uuid = require('node-uuid');
 var Q = require("q");
 var clc = require('cli-color');
 
 var TEMP = process.env["TEMP"] + "/";
+var nproc = os.cpus().length;
 
 var queue = [];
 var threads = {};
@@ -58,7 +60,7 @@ function convert(threadId, promise, params) {
 }
 
 setInterval(function() {
-	if (queue.length>0 && Object.keys(threads).length<8) {
+	if (queue.length>0 && Object.keys(threads).length < nproc) {
 		var args = queue.shift();
 		var promise = args.promise;
 		var params = args.params;
