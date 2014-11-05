@@ -353,15 +353,14 @@ Governator.directive('scrubBar', function ($rootScope, $timeout, $q) {
 			function cRegion(n) {
 				var p = n-10;
 					p = p<0 ? 0 : p;
-				return scope.scrub.frames.slice(n+1,n+10)
-				.concat(scope.scrub.frames.slice(p,n).reverse())
-				.concat(scope.scrub.frames.slice(n+10,n+25));
+				return scope.scrub.frames.slice(n+1, scope.scrub.frames.length)
+				.concat(scope.scrub.frames.slice(0,n).reverse());
 			}
 
 			// Lookbehind and Lookahead cache
 			function cacheRegionAroundIndex(n) {
 				if (n>=0) {
-					scope.scrub.frames.filter(function(F) {
+					cRegion(n).filter(function(F) {
 						return F._src!==null && !scope.cache.hasOwnProperty(F._src);
 					}).forEach(function(F) {
 						scope.hero.refreshCache(F._src);
